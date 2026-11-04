@@ -1,0 +1,17 @@
+[project]
+name = "urja-meter-api"
+version = "0.1.0"
+description = "A clean, documented API in front of the Urja Meter Ops portal"
+requires-python = ">=3.11"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.11"
+
+[tool.ruff]
+line-length = 120

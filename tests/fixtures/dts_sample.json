@@ -1,0 +1,56 @@
+[
+ {
+  "code": "DT-001",
+  "name": "Malviya Nagar DT 1",
+  "feederCode": "F-001",
+  "capacityKva": 100
+ },
+ {
+  "code": "DT-002",
+  "name": "Mansarovar DT 2",
+  "feederCode": "F-002",
+  "capacityKva": 63
+ },
+ {
+  "code": "DT-005",
+  "name": "Bani Park DT 5",
+  "feederCode": "F-005",
+  "capacityKva": 63
+ },
+ {
+  "code": "DT-007",
+  "name": "Sanganer DT 7",
+  "feederCode": "F-007",
+  "capacityKva": 63
+ },
+ {
+  "code": "DT-011",
+  "name": "Malviya Nagar DT 11",
+  "feederCode": "F-011",
+  "capacityKva": 160
+ },
+ {
+  "code": "DT-012",
+  "name": "Mansarovar DT 12",
+  "feederCode": "F-012",
+  "capacityKva": 100
+ },
+ {
+  "code": "DT-016",
+  "name": "Jhotwara DT 16",
+  "feederCode": "F-016",
+  "capacityKva": 100
+ },
+ {
+  "code": "DT-019",
+  "name": "Sikar Road DT 19",
+  "feederCode": "F-019",
+  "capacityKva": 63
+ },
+ {
+  "code": "DT-034",
+  "name": "Raja Park DT 34",
+  "feederCode": "F-006",
+  "capacityKva": 63
+ }
+]

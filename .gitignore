@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.env
+*.sqlite
+*.db
+.idea/
+.vscode/
+
+# Personal workspace notes (kept private; see README "How I used AI")
+brain/
+CLAUDE.md
