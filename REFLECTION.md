@@ -51,9 +51,10 @@ sent, then rebuilt the same request in Python. One response gave me all 403 mete
 
 The lesson: when the screen runs out of answers, the page's own code is the documentation.
 
-**The second hard part** was the messy hierarchy. The same code (for example `D-01`) shows up under several parents. The data cannot
-tell me whether codes are only unique inside a parent, or whether the data is simply wrong. I did not guess. The API keeps each
-meter's path exactly as reported and lists every problem under `issues`.
+**The second hard part** was the messy hierarchy. The same code (for example `D-01`) shows up under several parents. At first I
+thought the data couldn't say whether codes are only unique inside a parent or the data is simply wrong. A closer look settled
+it: every transformer has exactly one upstream path, so the codes are reused per parent. The API keeps each meter's path exactly
+as reported and lists every reused code under `issues`.
 
 ## What mistakes did you make while solving this?
 In the order they hurt:

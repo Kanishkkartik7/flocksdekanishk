@@ -5,15 +5,17 @@ Almost everything came from the browser (Chrome DevTools) and normal page use. L
 Python. An AI assistant helped me plan the steps and read the results (see [§9](#9-how-i-investigated)).
 
 **How to read the labels.** *Verified* means I saw it in a real response. *Inferred* means it is a sensible reading of what I
-saw, but not proven. *Unverified* means I did not check. If a sentence has no label, it is something I saw directly.
+saw, but not proven. *Unverified* means I did not check. *SvelteKit convention* means it comes from how SvelteKit works, not from
+something I saw on this portal. The counts in [§8](#8-data-quality) were *computed* with a script from the export I downloaded.
+If a sentence has no label, it is something I saw directly.
 
 The API in this repo is built on these findings. See the [README](README.md).
 
 ## Summary
 - The portal is a **SvelteKit** app. Sessions use one cookie, valid for 1 hour. The cookie's name suggests the Better Auth
   library (*inferred*).
-- Login is a form post. The result (`redirect` or `failure`) is in the JSON body, **not** in the HTTP status. Without a valid
-  session, the data endpoints answer `401` with JSON.
+- Login is a form post. The result (`redirect` or `failure`) is in the JSON body, **not** in the HTTP status. Without a session
+  cookie, `/portal/meters/search` answered `401` with JSON; I assume the other data endpoints do the same.
 - The pages' HTML contains **no data**. The browser fetches JSON from **six endpoints under `/portal/`**, plus one page-data URL
   (`__data.json`).
 - **There is a bulk path.** The *Export all meters* button calls an HMAC-signed endpoint, `/portal/export`. One response holds
@@ -29,7 +31,7 @@ The API in this repo is built on these findings. See the [README](README.md).
   page data, and the `kit.start(...)` bootstrap script.
 - **Better Auth** (*inferred*), from the cookie name `__Secure-better-auth.session_token`.
 - **Pages.** I read the route list in `/_app/immutable/entry/app.<hash>.js`. A negative number in that list means the page has a
-  server-side `load` function. There are no hidden pages.
+  server-side `load` function (*SvelteKit convention*). There are no hidden pages.
 
 | Route | Server load | What it shows, and where the data comes from |
 |---|---|---|
@@ -65,11 +67,13 @@ GET /portal/...   Cookie: __Secure-better-auth.session_token=…   ← that cook
   HTTP 200 (the successful login showed this), so the failure is *presumably* a 200 too (*inferred*).
   My client treats `"failure"` as `portal_auth_failed` straight away, without retrying, and treats any answer that is not
   `"redirect"` as a failed login.
-- **There is no CSRF token.** SvelteKit instead rejects form posts whose `Origin` does not match the site. My client sends the right
+- **There is no CSRF token.** SvelteKit instead rejects form posts whose `Origin` does not match the site (*SvelteKit convention*).
+  My client sends the right
   `Origin` and logging in from Python works. *Unverified:* whether `Origin` is really required.
 - **Session lifetime: 1 hour.** No data response ever sent a new `Set-Cookie`, so the session does not seem to extend while in use
-  (*inferred*, from a handful of requests). When `Max-Age` runs out, the browser deletes the cookie, and the data endpoints answer
-  **`401` with JSON**: `{"error":"unauthorized","message":"A valid session is required."}` (seen about 1.5 hours after login).
+  (*inferred*, from a handful of requests). When `Max-Age` runs out, the browser deletes the cookie. `/portal/meters/search` then answered
+  **`401` with JSON**: `{"error":"unauthorized","message":"A valid session is required."}` (seen about 1.5 hours after login, on
+  that one endpoint; I assume the other data endpoints answer the same way).
   On a 401, my client logs in again once and retries. As a precaution it also treats a redirect, or HTML where JSON was expected,
   as "logged out", and it logs in again after 55 minutes, before the cookie expires.
 - **Signing secret:** `GET /portal/keys` (cookie only) returns `{"data":{"signingSecret":"…"}}`, about 32 characters.
@@ -107,7 +111,8 @@ I found these in the Network tab, then checked the list by searching every JavaS
  "geo":{"lat":26.938961002479868,"lng":75.83095696146852}}
 ```
 **Errors**
-- No valid session gives **401** with `{"error":"unauthorized","message":"A valid session is required."}`.
+- No session cookie gives **401** with `{"error":"unauthorized","message":"A valid session is required."}` (seen on
+  `/portal/meters/search`; assumed for the others).
 - An unknown meter on a `/portal/` endpoint gives **404** with `{"error":"not_found","message":"Meter not found"}`.
 - An unknown route gives **404 with an HTML page**.
 - So a client must check `content-type` before parsing.
@@ -181,7 +186,8 @@ first. (I did not compare the other four field by field.)
 - **Every value is a string**, and trailing zeros are dropped (`"48440"`).
 
 ## 5. Paging and search
-- `/portal/meters/search?q=&page=N` returns 20 per page. There are 403 meters, so 21 pages. `q` matches the meter number or serial.
+- `/portal/meters/search?q=&page=N` returns 20 per page. There are 403 meters, so 21 pages. `q` matches the meter number or serial,
+  according to the search box's placeholder text.
   There is no other filtering or sorting.
 - `/portal/dts?page=N` returns 20 per page. There are 40, so 2 pages.
 - `/portal/export` returned all 403 meters on page 1, with no `page` or `pageSize` in the response. My client still asks for pages
@@ -200,11 +206,11 @@ GET /portal/export?page=1   x-timestamp: <timestamp>   x-signature: <signature>
 ```
 - **A captured example:** `x-timestamp: 1793799552` (13:39:12 UTC; the server's `Date` header said 13:39:11, so the clocks agree)
   and a 64-character hex signature. The response was 231,658 bytes and took 386 ms.
-- **The signature covers the method, path, exact query string and time.** Each page needs its own signature, the query string must
-  match character for character, and a retry needs a fresh signature. The server presumably rejects old timestamps. *Unverified:*
-  how long a timestamp stays valid.
+- **The signature covers the method, path, exact query string and time.** So each page needs its own signature, and the query string
+  must match character for character. The server presumably rejects old timestamps. *Unverified:* how long a timestamp stays
+  valid, so my client signs every page and every retry afresh rather than reusing a signature.
 - **Why it matters:** the export replaces about **827 requests** (21 list pages, 403 meter pages, 403 geo calls) with **2**, and it
-  avoids all three meter-page formats.
+  avoids decoding the meter pages (devalue plus two detail formats).
 - **It does not include readings.** Those still take one `/energy` call per meter, and the schedule differs between meters.
 - The UI only ever asks for `page=1`. *Unverified:* what page 2 returns, and whether the secret changes over time.
 
@@ -234,16 +240,18 @@ GET /portal/export?page=1   x-timestamp: <timestamp>   x-signature: <signature>
 - **Hover preloading** (`data-sveltekit-preload-data="hover"`): hovering over a link fetches its data, which adds noise to the Network tab.
 
 ## 8. Data quality
-From the export (all 403 meters):
+From the downloaded export (all 403 meters), *computed* with a script:
 - **Blank values:**
   - 6 meters have no circle code, and some others have a circle code but no name.
   - 3 have no substation code.
   - 5 have no feeder code, and a few others have a feeder code but no name.
 - **Conflicting names:** `DT-007` is "Sanganer DT 7" for 10 meters and "Old Malviya Nagar Xfmr" for 3.
 - **Codes reused under different parents (54 cases):** `D-01` is under circles C-01 (20 meters), C-03 (10) and C-05 (9);
-  `SD-01` is under D-01, D-05 and D-09; `F-001` is under SS-01 and SS-11. Either codes are only unique inside their parent, or the
-  meters are wired inconsistently. The data alone cannot tell which, so my API keeps every meter's path as reported and lists these
-  cases instead of guessing.
+  `SD-01` is under D-01, D-05 and D-09; `F-001` is under SS-01 and SS-11. By level, that is every division, subdivision and
+  substation code, and 12 of the 28 feeder codes. But every one of the 40 DTs has exactly one upstream path. So this looks like
+  **codes that are only unique inside their parent** (*inferred*), not meters wired inconsistently. My API keys the tree by full
+  path, so each of these is a separate node, and it lists the reused codes in `issues`, because a consumer filtering by code alone
+  would otherwise mix branches.
 - **Clean parts:** no duplicate IDs or serials; `dtCode` always equals `hierarchy.dt.code`; all coordinates are inside Jaipur.
 - **Usage looks generated** (J100000 only, *inferred*): it uses 20.29–20.30 kWh on every full day, at a constant power factor of
   0.926, with no daily load shape.
@@ -259,7 +267,8 @@ Here is the order I worked in, including the dead ends.
 4. **Searched every JavaScript file for `/portal/`.** This found `keys` and `export`. I read the code before calling either one, to
    check they were plain GETs, then used the portal's own button.
 5. **Compared a `legacy` and a `v2` meter** to see what `build` changes.
-6. **Once the client worked**, made a few read-only checks from Python (for example, three-phase meter J100005 reports only `voltR`).
+6. **Once the client worked**, Claude ran a few read-only checks from Python at my request (for example, three-phase meter J100005
+   reports only `voltR`).
 7. **Settled two questions in the browser:** what an expired session returns (I waited it out), and what a wrong password returns
    (one try).
 8. **Later, in a review of my own code**, I fetched readings for more meters and found that they do not all follow the first two

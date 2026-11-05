@@ -3,7 +3,7 @@
 The portal's hierarchy is messy (see PROTOCOL.md): some codes are blank, one transformer has two names, and codes
 appear under several parents (e.g. D-01 under three circles). Nodes are therefore keyed by their full path, so the
 tree always reflects exactly what each meter reports, and every anomaly is listed in `issues` instead of being
-silently "fixed". See decision 0005.
+silently "fixed". The reasoning is in the README, under "Design decisions and trade-offs".
 """
 
 from collections import Counter, defaultdict
