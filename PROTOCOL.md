@@ -1,8 +1,8 @@
 # How the Urja Meter Ops portal works
 
-This is what I found by exploring https://urja-ops.flockenergy.tech, logged in as `operator@urja.local`, on 4–5 Nov 2026.
+This is what I found by exploring https://urja-ops.flockenergy.tech, logged in as `operator@urja.local`, on 4 and 5 Nov 2026.
 Almost everything came from the browser (Chrome DevTools) and normal page use. Later, a few read-only checks were made from
-Python. An AI assistant helped me plan the steps and read the results (see [§9](#9-how-i-investigated)).
+Python. AI tools (Google Antigravity, ChatGPT and Claude Code) helped me plan the steps and read the results (see [§9](#9-how-i-investigated)).
 
 **How to read the labels.** *Verified* means I saw it in a real response. *Inferred* means it is a sensible reading of what I
 saw, but not proven. *Unverified* means I did not check. *SvelteKit convention* means it comes from how SvelteKit works, not from
@@ -22,7 +22,7 @@ The API in this repo is built on these findings. See the [README](README.md).
 - **There is a bulk path.** The *Export all meters* button calls an HMAC-signed endpoint, `/portal/export`. One response holds
   **all 403 meters** with hierarchy and location. The API uses it as its main source.
 - **Readings** are **cumulative** registers (kWh, kVAh, voltage), one meter at a time. **Meters do not all report the same
-  way:** a survey of all 403 meters found 363 that report once a day (8 readings) and 40, exactly J100000–J100039, that report
+  way:** a survey of all 403 meters found 363 that report once a day (8 readings) and 40, exactly J100000 to J100039, that report
   every 30 minutes (337 readings). See [§4](#readings-energy).
 - The data has **quirks** a consumer would trip over: numbers as strings, four naming styles, two record formats, blank and
   conflicting hierarchy values, and repeated rows. See [§7](#7-quirks-and-surprises) and [§8](#8-data-quality).
@@ -151,8 +151,8 @@ The DT list adds each transformer's capacity in kVA (63, 100, 250, …). Every D
 
 | Meters | Readings | First → last timestamp | Schedule |
 |---|---|---|---|
-| **40**: J100000 – J100039 | 337 | `23/06/2026 23:30` → `30/06/2026 23:30` | every 30 minutes |
-| **363**: J100040 – J100402 | 8 (9 rows on five meters, see below) | `23/06/2026 00:00` → `30/06/2026 00:00` | once a day |
+| **40**: J100000 to J100039 | 337 | `23/06/2026 23:30` → `30/06/2026 23:30` | every 30 minutes |
+| **363**: J100040 to J100402 | 8 (9 rows on five meters, see below) | `23/06/2026 00:00` → `30/06/2026 00:00` | once a day |
 
 - **Exactly two schedules, and they split by ID:** the 40 half-hourly meters are exactly the first 40 IDs. Nothing in the meter
   details explains it. Build, installation type, phase, status and make are all mixed across both schedules.
@@ -182,8 +182,8 @@ appears twice, and one of the two rows has a missing value. On J100089 I looked 
 **Values.**
 - **`kwh` and `kvah` are cumulative registers**, like a car's odometer. **Usage is the difference between readings**, so n readings
   give **n − 1 intervals** (337 give 336, 8 give 7). *Verified* for all 403 meters by the survey: no register ever went down.
-- **kWh ÷ kVAh** is about 0.93 on J100000 and J100400 (0.926–0.933 on the intervals I looked at). That ratio is the power factor.
-- **`voltR`** is the R-phase voltage (220–240 V in what I saw). Even a three-phase meter (J100005) reports only `voltR`.
+- **kWh ÷ kVAh** is about 0.93 on J100000 and J100400 (0.926 to 0.933 on the intervals I looked at). That ratio is the power factor.
+- **`voltR`** is the R-phase voltage (220 to 240 V in what I saw). Even a three-phase meter (J100005) reports only `voltR`.
 - **Timestamps** look like `DD/MM/YYYY HH:MM`: **day first, no timezone**. Day-first is *verified* (`30/06/2026` cannot be
   month-first). I read them as **IST (+05:30)** because the utility is in Jaipur (*inferred*; the portal never says).
 - **Every value is a string**, and trailing zeros are dropped (`"48440"`).
@@ -257,7 +257,7 @@ From the downloaded export (all 403 meters), *computed* with a script:
   path, so each of these is a separate node, and it lists the reused codes in `issues`, because a consumer filtering by code alone
   would otherwise mix branches.
 - **Clean parts:** no duplicate IDs or serials; `dtCode` always equals `hierarchy.dt.code`; all coordinates are inside Jaipur.
-- **Usage looks generated** (J100000 only, *inferred*): it uses 20.29–20.30 kWh on every full day, at a constant power factor of
+- **Usage looks generated** (J100000 only, *inferred*): it uses 20.29 to 20.30 kWh on every full day, at a constant power factor of
   0.926, with no daily load shape.
 
 ## 9. How I investigated
@@ -280,9 +280,10 @@ Here is the order I worked in, including the dead ends.
 9. **Surveyed all 403 meters' readings.** At my request, Claude wrote `scripts/survey_readings.py`, and we ran it once: one
    request per second, about 7 minutes. It replaced "checked eight meters" with real counts.
 
-**The AI assistant's part:** I did the browsing myself. Claude Code suggested the next step and the Console snippets, and helped me
-read what came back: the devalue format, the route list, the signing code. The later review and fixes were also done with Claude
-Code. A claim stayed *inferred* or *unverified* until a live response showed otherwise. More in the README's
+**The AI tools' part:** I did the browsing myself. I used Google Antigravity, ChatGPT and Claude Code during the assignment. Claude
+Code suggested the next step and the Console snippets, and helped me read what came back: the devalue format, the route list, the
+signing code. ChatGPT helped me think through the portal's behaviour and troubleshoot. The later review and fixes were done with
+Claude Code. A claim stayed *inferred* or *unverified* until a live response showed otherwise. More in the README's
 [How I used AI](README.md#how-i-used-ai).
 
 I treated the portal as read-only throughout: normal page use and GET requests only, one at a time.
@@ -292,5 +293,5 @@ I treated the portal as read-only throughout: normal page use and GET requests o
 - Do repeated failed logins cause a lockout or a rate limit? (Deliberately not tested.)
 - Is the `Origin` header required for login?
 - How long does an export signature stay valid? Does the secret change, or is it tied to the session? What does `page=2` return?
-- Why do exactly the first 40 meters (J100000–J100039) report every 30 minutes, and the rest once a day?
+- Why do exactly the first 40 meters (J100000 to J100039) report every 30 minutes, and the rest once a day?
 - Why does the portal repeat the last row on those five meters?

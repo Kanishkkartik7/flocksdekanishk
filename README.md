@@ -21,7 +21,7 @@ consumption as clean JSON, without ever touching the portal.
    and my parser threw away good readings when the portal repeated a row. My tests did not catch this because they used a fake
    portal built from my own assumptions. I fixed both against real data. The full story is in [REFLECTION.md](REFLECTION.md).
 5. **A survey of all 403 meters** (one request per second) then turned the sample into counts: 363 meters report once a day,
-   and 40, exactly J100000–J100039, every 30 minutes. Every meter I had looked at early on was among those first 40.
+   and 40, exactly J100000 to J100039, every 30 minutes. Every meter I had looked at early on was among those first 40.
 
 ## Quick start
 Requires Python 3.11 or newer.
@@ -157,10 +157,10 @@ Details and the verified / inferred / unverified labels are in [PROTOCOL.md](PRO
   (+05:30), a fixed offset because India has no daylight saving.
 - **The export is the source of truth for meter details.** It matched the list and meter pages for the two meters I compared
   (J100000 legacy, J100004 v2), and it is the only source that is clean for both record formats.
-- **The data is a static snapshot.** Every meter's readings cover 23–30 June 2026 (checked for all 403). So the cache times protect
+- **The data is a static snapshot.** Every meter's readings cover 23 to 30 June 2026 (checked for all 403). So the cache times protect
   the portal; they do not catch updates.
 - **Reading schedules come from the data, not from a rule.** A survey of all 403 meters found exactly two: 363 report once a day
-  and 40 (J100000–J100039) every 30 minutes. Even so, the API reads each meter's step from its own timestamps rather than
+  and 40 (J100000 to J100039) every 30 minutes. Even so, the API reads each meter's step from its own timestamps rather than
   hard-coding those two, in case the portal adds another. See [PROTOCOL.md §4](PROTOCOL.md#readings-energy).
 - **IDs:** the portal's meter IDs are uppercase and case-sensitive. Accepting any case is safe because no two differ only by case.
 - **Odd data is passed through, not "fixed".** J100000 is decommissioned yet has a full set of readings. They are returned as they are.
@@ -268,7 +268,15 @@ What I would change at that scale:
   two reading bugs got past the first version of the tests. There is no live contract test yet.
 
 ## How I used AI
-I worked with Claude Code (Anthropic's AI coding assistant) in VS Code. This is how the work was split.
+AI help was substantial in this project, especially for the implementation. I did not write every line of code myself. I used three
+tools:
+
+- **Google Antigravity** was part of my development workflow.
+- **ChatGPT** helped me reason through the portal's behaviour, troubleshoot problems, discuss implementation choices and review my
+  documentation.
+- **Claude Code** (in VS Code) helped with implementation, code and test generation, debugging, and the later code review and fixes.
+
+The lists below cover my own work and what Claude Code did in this repository.
 
 **What I did**
 - **Explored the portal myself** in Chrome DevTools: logging in, clicking through pages, running Console snippets, reading the page
@@ -280,7 +288,7 @@ I worked with Claude Code (Anthropic's AI coding assistant) in VS Code. This is 
   password.
 - **Edited the drafts** of this README, PROTOCOL.md and [REFLECTION.md](REFLECTION.md).
 
-**What Claude did**
+**What Claude Code did**
 - Read the brief and planned the work with me. It guided the investigation one step at a time: which request to look at next, the
   Console snippets to run, and what the answers meant (SvelteKit's data format, the HMAC signing code, and meter terms such as
   cumulative registers, kVAh and power factor).
