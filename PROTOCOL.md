@@ -6,7 +6,8 @@ Python. An AI assistant helped me plan the steps and read the results (see [§9]
 
 **How to read the labels.** *Verified* means I saw it in a real response. *Inferred* means it is a sensible reading of what I
 saw, but not proven. *Unverified* means I did not check. *SvelteKit convention* means it comes from how SvelteKit works, not from
-something I saw on this portal. The counts in [§8](#8-data-quality) were *computed* with a script from the export I downloaded.
+something I saw on this portal. The counts in [§8](#8-data-quality) were *computed* with a script from the export I downloaded, and the reading counts in
+[§4](#readings-energy) come from a survey of every meter.
 If a sentence has no label, it is something I saw directly.
 
 The API in this repo is built on these findings. See the [README](README.md).
@@ -21,8 +22,8 @@ The API in this repo is built on these findings. See the [README](README.md).
 - **There is a bulk path.** The *Export all meters* button calls an HMAC-signed endpoint, `/portal/export`. One response holds
   **all 403 meters** with hierarchy and location. The API uses it as its main source.
 - **Readings** are **cumulative** registers (kWh, kVAh, voltage), one meter at a time. **Meters do not all report the same
-  way:** J100000 reports every 30 minutes (337 rows), J100400 once a day (8 rows). I checked eight meters, not all 403.
-  See [§4](#4-data-model).
+  way:** a survey of all 403 meters found 363 that report once a day (8 readings) and 40, exactly J100000–J100039, that report
+  every 30 minutes (337 readings). See [§4](#readings-energy).
 - The data has **quirks** a consumer would trip over: numbers as strings, four naming styles, two record formats, blank and
   conflicting hierarchy values, and repeated rows. See [§7](#7-quirks-and-surprises) and [§8](#8-data-quality).
 
@@ -87,7 +88,7 @@ I found these in the Network tab, then checked the list by searching every JavaS
 | POST | `/login` | form `email`, `password` | JSON result: `redirect` plus the cookie, or `failure` (see [§2](#2-access-and-authentication)) |
 | GET | `/portal/meters/search` | `q` (meter number or serial), `page` | `{data, total, page, pageSize}`, 20 per page |
 | GET | `/portal/meters/{id}/geo` | none | `{"data":{"latitude":"26.93…","longitude":"75.83…"}}` (strings) |
-| GET | `/portal/meters/{id}/energy` | none (no date range) | `{"data":[{timestamp, kwh, kvah, voltR}, …]}`. 337 rows for J100000 (every 30 min), 8–9 for the daily meters checked |
+| GET | `/portal/meters/{id}/energy` | none (no date range) | `{"data":[{timestamp, kwh, kvah, voltR}, …]}`. 337 rows for the 40 half-hourly meters, 8 for the 363 daily ones (9 on five meters with a repeated row) |
 | GET | `/meters/{id}/__data.json` | `x-sveltekit-invalidated=001` | page data in devalue format: `meterId`, `detail`, `hierarchy` |
 | GET | `/portal/dts` | `page` | `{data:[{code, name, feederCode, capacityKva}], total: 40, page, pageSize: 20}` |
 | GET | `/portal/keys` | none | `{"data":{"signingSecret":"…"}}` |
@@ -143,42 +144,44 @@ Zone → Circle → Division → Subdivision → Substation → Feeder → DT (d
 The DT list adds each transformer's capacity in kVA (63, 100, 250, …). Every DT's `feederCode` agrees with what its meters report.
 
 ### Readings (`/energy`)
-**Reading schedules.** Meters do **not** all report the same way. I checked eight meters by fetching `/energy` for each:
+**Reading schedules.** Meters do **not** all report the same way. To find out how many follow each schedule, I surveyed
+**all 403 meters**: one `/energy` request each, one per second, with
+[`scripts/survey_readings.py`](scripts/survey_readings.py). The result per meter is in
+[`docs/reading-survey.csv`](docs/reading-survey.csv). *Verified* for all 403:
 
-| Meter | Rows | First → last timestamp | Schedule |
+| Meters | Readings | First → last timestamp | Schedule |
 |---|---|---|---|
-| J100000 | 337 | `23/06/2026 23:30` → `30/06/2026 23:30` | every 30 minutes |
-| J100001 | 337 | `23/06/2026 23:30` → `30/06/2026 23:30` | every 30 minutes |
-| J100400 | 8 | `23/06/2026 00:00` → `30/06/2026 00:00` | once a day |
-| J100089, J100134, J100195, J100211, J100330 | 9 each | `23/06/2026 00:00` → `30/06/2026 00:00` | once a day (8 days, and the last row appears twice, see below) |
+| **40**: J100000 – J100039 | 337 | `23/06/2026 23:30` → `30/06/2026 23:30` | every 30 minutes |
+| **363**: J100040 – J100402 | 8 (9 rows on five meters, see below) | `23/06/2026 00:00` → `30/06/2026 00:00` | once a day |
 
-- **Verified:** these eight meters, and the fact that at least two schedules exist.
-- **Unverified:** the schedule of the other 395 meters. I did not fetch them all (that is 403 requests to a portal I treat as
-  read-only), so I cannot say how many meters are on each schedule, or that there are only two.
-- **A mistake worth knowing about:** my first version assumed every meter had 337 readings every 30 minutes, because the first two
-  meters I looked at did. J100400 proved it wrong. I do **not** claim that all 403 meters follow any one schedule.
+- **Exactly two schedules, and they split by ID:** the 40 half-hourly meters are exactly the first 40 IDs. Nothing in the meter
+  details explains it. Build, installation type, phase, status and make are all mixed across both schedules.
+- **No gaps:** every meter's readings are evenly spaced on its own schedule, with none missing.
+- **A mistake worth knowing about:** my first version assumed every meter had 337 readings every 30 minutes, because every meter
+  I looked at early on (J100000, J100001, J100004, J100005) did. They were all among the first 40 IDs, so my sample was biased.
+  J100400 proved it wrong, and the survey showed that 90% of meters are on the daily schedule.
 - **What the API does about it:** it reads each meter's normal step from that meter's own timestamps (the most common gap) and
-  reports it as `reading_interval_minutes`. That works for any step. See [README](README.md#design-decisions-and-trade-offs).
-- **Time window:** all eight meters cover `23/06/2026` to `30/06/2026` (verified for those eight, unverified for the rest). If that
-  holds for the others, the data is a frozen snapshot about four months older than today.
+  reports it as `reading_interval_minutes`, instead of hard-coding the two schedules. See
+  [README](README.md#design-decisions-and-trade-offs).
+- **Time window:** every meter covers `23/06/2026` to `30/06/2026`, so the data is a frozen snapshot about four months older
+  than today.
 
-**Duplicate timestamps.** *Verified* on five meters (J100089, J100134, J100195, J100211, J100330): `/energy` returns 9 rows where
-the daily schedule would give 8, because the last timestamp, `30/06/2026 00:00`, appears twice. On all five, one of the two rows
-has a blank `kwh`. On J100089 I looked at the whole row: `voltR` is blank too, `kvah` repeats unchanged, and the full row comes
-first. (I did not compare the other four field by field.)
+**Duplicate timestamps.** *Verified* by the survey: exactly five meters (J100089, J100134, J100195, J100211, J100330), and no
+others. Each `/energy` returns 9 rows where the daily schedule would give 8, because the last timestamp, `30/06/2026 00:00`,
+appears twice, and one of the two rows has a missing value. On J100089 I looked at the whole row: `kwh` and `voltR` are blank,
+`kvah` repeats unchanged, and the full row comes first. (I did not compare the other four field by field.)
 ```json
 {"timestamp":"30/06/2026 00:00","kwh":"12732.34","kvah":"13750.93","voltR":"229"}
 {"timestamp":"30/06/2026 00:00","kwh":"","kvah":"13750.93","voltR":""}
 ```
-- *Unverified:* whether the full row always comes first, whether other meters have duplicates, and why the portal sends them.
+- *Unverified:* whether the full row always comes first, and why the portal sends the duplicates.
 - **How the API handles it:** the row with more non-blank values wins. On a tie, the later row wins. A whole row is chosen and rows
   are never mixed, so every reading the API returns is one the portal really sent. These meters therefore give 8 readings with the
   real `kwh`. (My first version kept the later row, which threw the real reading away.)
 
 **Values.**
 - **`kwh` and `kvah` are cumulative registers**, like a car's odometer. **Usage is the difference between readings**, so n readings
-  give **n − 1 intervals** (337 give 336, 8 give 7). *Verified* for the four meters whose usage I computed (J100000, J100400,
-  J100089, J100134): no register went down. *Unverified* for the rest.
+  give **n − 1 intervals** (337 give 336, 8 give 7). *Verified* for all 403 meters by the survey: no register ever went down.
 - **kWh ÷ kVAh** is about 0.93 on J100000 and J100400 (0.926–0.933 on the intervals I looked at). That ratio is the power factor.
 - **`voltR`** is the R-phase voltage (220–240 V in what I saw). Even a three-phase meter (J100005) reports only `voltR`.
 - **Timestamps** look like `DD/MM/YYYY HH:MM`: **day first, no timezone**. Day-first is *verified* (`30/06/2026` cannot be
@@ -230,10 +233,11 @@ GET /portal/export?page=1   x-timestamp: <timestamp>   x-signature: <signature>
   (`Z-01` vs `F-001`), the key `Sub Station` does not match the word "Substation", and phase is lowercase (`single`/`three`).
 - **Case-sensitive meter IDs.**
 - **Repeated last row on some meters** (see [§4](#readings-energy)).
-- **Decommissioned meters still report readings:** J100000 is `Decommissioned` and has a full 337 rows (*verified* for that meter only).
+- **Decommissioned meters still report readings:** all 75 decommissioned meters have a full week of readings (*verified* by the survey).
 - **Intermittent `502 Bad Gateway`:** seen once on a static JS file; it worked on reload.
-- **Rate limiting:** *not observed by me*. I kept to one request at a time. The client still treats `429` as retryable (using
-  `Retry-After` if present) and passes a persistent one on as `429`, in case the portal limits bursts.
+- **Rate limiting:** *not observed*. The survey sent 403 requests, one per second, without a single `429`. Faster bursts were not
+  tried. The client still treats `429` as retryable (using `Retry-After` if present) and passes a persistent one on as `429`, as a
+  precaution.
 - **`L&T`** contains `&`, which must be URL-encoded in queries.
 - **Serial prefixes do not match makes:** for example `L&84997` is a Genus meter.
 - **Two kinds of 404:** JSON for an unknown meter, HTML for an unknown route.
@@ -273,6 +277,8 @@ Here is the order I worked in, including the dead ends.
    (one try).
 8. **Later, in a review of my own code**, I fetched readings for more meters and found that they do not all follow the first two
    I had looked at (different schedule, repeated last rows). That is why [§4](#readings-energy) has labels and a table.
+9. **Surveyed all 403 meters' readings.** At my request, Claude wrote `scripts/survey_readings.py`, and we ran it once: one
+   request per second, about 7 minutes. It replaced "checked eight meters" with real counts.
 
 **The AI assistant's part:** I did the browsing myself. Claude Code suggested the next step and the Console snippets, and helped me
 read what came back: the devalue format, the route list, the signing code. The later review and fixes were also done with Claude
@@ -286,5 +292,5 @@ I treated the portal as read-only throughout: normal page use and GET requests o
 - Do repeated failed logins cause a lockout or a rate limit? (Deliberately not tested.)
 - Is the `Origin` header required for login?
 - How long does an export signature stay valid? Does the secret change, or is it tied to the session? What does `page=2` return?
-- How many of the 403 meters report every 30 minutes, and how many once a day? Are there other schedules?
-- Why does the portal repeat the last row on some meters, and does it happen elsewhere?
+- Why do exactly the first 40 meters (J100000–J100039) report every 30 minutes, and the rest once a day?
+- Why does the portal repeat the last row on those five meters?

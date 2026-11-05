@@ -7,8 +7,9 @@ What it handles (details in PROTOCOL.md):
 - Data endpoints only need that cookie. Without a valid session they answer 401 with JSON. We log in again a little
   before the hour is up, and also whenever a response looks logged out: 401/403, or, as a precaution, a redirect or HTML
   where JSON was expected.
-- The portal sometimes returns 502s, and rate-limits bursts with 429, so requests are retried with exponential backoff on
-  timeouts, connection errors and 429/502/503/504 (a short `Retry-After` is honoured). A 429 that persists is passed on as 429.
+- The portal sometimes returns 502s, so requests are retried with exponential backoff on timeouts, connection errors and
+  502/503/504. 429 is retried too (a short `Retry-After` is honoured), and a 429 that persists is passed on as 429. That's a
+  precaution: no 429 was seen, even in a survey of all 403 meters at one request per second.
 - GET /portal/export must be HMAC-signed with a secret from GET /portal/keys (see signing.py).
 """
 
@@ -221,8 +222,7 @@ def _looks_logged_out(response: httpx.Response) -> bool:
 
 
 def _retry_after_seconds(response: httpx.Response) -> float:
-    """The `Retry-After` header in seconds, capped. The portal sent no such header when it rate-limited (observed), so
-    this is usually 0 and the normal backoff applies."""
+    """The `Retry-After` header in seconds, capped. 0 when the header is missing, and then the normal backoff applies."""
     try:
         return min(max(float(response.headers.get("retry-after", "0")), 0.0), MAX_RETRY_AFTER_SECONDS)
     except ValueError:  # an HTTP-date form; not worth parsing

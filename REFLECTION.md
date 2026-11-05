@@ -6,7 +6,7 @@
 
 - **The bulk export is reliable for meter details.** I verified the bulk export against the regular portal pages for two meters: J100000 (legacy format) and J100004 (v2 format). Both matched, so I treated the bulk export as the primary source for meter information.
 
-- **The data represents a fixed snapshot.** All eight meters I checked had readings covering the same period: 23–30 June 2026. Based on this, I treated caching as a way to reduce unnecessary requests to the portal rather than a mechanism for keeping up with incoming data.
+- **The data represents a fixed snapshot.** All 403 meters have readings covering the same period: 23–30 June 2026 (I surveyed every meter at the end to confirm this). Based on this, I treated caching as a way to reduce unnecessary requests to the portal rather than a mechanism for keeping up with incoming data.
 
 - **A session expiry returns the same error across endpoints.** I observed a `401` response on only one endpoint, `/portal/meters/search`. I assumed other endpoints behave similarly, although this has not been independently verified.
 
@@ -34,21 +34,19 @@ The breakthrough was that a single export response provided all 403 meters, incl
 
 There are a few things I'd like to work on if I had one more day:
 
-1. **Check readings for all meters.** So far, I've only checked readings for eight meters. My understanding that some meters report every 30 minutes while others report once a day is based on that small sample. I'd run a slow check, making roughly one request per second, to understand the actual reporting pattern across all 403 meters.
+1. **Verify a few things about the portal.** There are still some unanswered questions, such as how long the signature remains valid, whether the secret changes, what happens when requesting `page=2` from the export endpoint, and whether the `Origin` header is actually required. I'd spend some time testing these in the browser rather than making assumptions.
 
-2. **Verify a few things about the portal.** There are still some unanswered questions, such as how long the signature remains valid, whether the secret changes, what happens when requesting `page=2` from the export endpoint, and whether the `Origin` header is actually required. I'd spend some time testing these in the browser rather than making assumptions.
+2. **Add tests against the live portal.** My current tests don't check whether the actual portal is still behaving as expected. I'd add scheduled tests to catch changes in the portal's endpoints or response formats before they cause problems.
 
-3. **Add tests against the live portal.** My current tests don't check whether the actual portal is still behaving as expected. I'd add scheduled tests to catch changes in the portal's endpoints or response formats before they cause problems.
+3. **Keep a fallback for data extraction.** Right now, the solution depends on the bulk export endpoint. I'd also build a backup method using the normal meter pages, so the system can still retrieve data if the export feature stops working.
 
-4. **Keep a fallback for data extraction.** Right now, the solution depends on the bulk export endpoint. I'd also build a backup method using the normal meter pages, so the system can still retrieve data if the export feature stops working.
+4. **Move data refreshing to the background.** Instead of making users wait for the portal to respond, I'd refresh the data in the background and store it in a small database. That would make the application faster and more reliable.
 
-5. **Move data refreshing to the background.** Instead of making users wait for the portal to respond, I'd refresh the data in the background and store it in a small database. That would make the application faster and more reliable.
-
-6. **Build a simple dashboard.** I'd like to add a web page showing meters on a map, grouped by their status, along with consumption charts. This would make the collected data much easier to explore and understand.
+5. **Build a simple dashboard.** I'd like to add a web page showing meters on a map, grouped by their status, along with consumption charts. This would make the collected data much easier to explore and understand.
 
 ## What mistake did I make while solving this?
 
-The biggest mistake I made was **assuming that every meter sends readings every 30 minutes.** The first two meters I checked, J100000 and J100001, both had 337 readings at 30-minute intervals. I assumed the same pattern would apply to all 403 meters, but that turned out to be wrong. Some meters, like J100400, report only once a day.
+The biggest mistake I made was **assuming that every meter sends readings every 30 minutes.** The first two meters I checked, J100000 and J100001, both had 337 readings at 30-minute intervals. I assumed the same pattern would apply to all 403 meters, but that turned out to be wrong. Some meters, like J100400, report only once a day. When I later surveyed all 403 meters, 363 turned out to be daily, and the 40 half-hourly ones are exactly the first 40 IDs (J100000–J100039). Every meter I had looked at early on came from that group, so my sample was biased from the start.
 
 Because of this, my code started flagging daily readings as missing data. I also documented the assumption in `PROTOCOL.md`, stating that every meter had 337 readings, which was incorrect.
 
@@ -72,7 +70,7 @@ There were a few smaller mistakes too:
 
 - **The solution depends on an endpoint that isn't officially documented.** The bulk export works right now, but if the portal changes its export API or signing mechanism, the meter details could stop updating. I haven't built a proper fallback for that yet.
 
-- **There are still a few things I haven't fully verified.** For example, how long the signature stays valid, what `page=2` returns, whether the secret changes over time, and how frequently the remaining 395 meters report readings.
+- **There are still a few things I haven't fully verified.** For example, how long the signature stays valid, what `page=2` returns, and whether the secret changes over time.
 
 - **The reading-frequency calculation could be more reliable.** Currently, I use the most common time gap between readings to estimate a meter's reporting interval. This works for regular patterns, but meters with irregular readings might produce misleading results.
 
