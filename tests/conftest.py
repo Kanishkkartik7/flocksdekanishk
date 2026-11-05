@@ -34,7 +34,7 @@ class FakePortal:
     def __init__(self):
         self.export_records = load_fixture("export_sample.json")
         self.dts = load_fixture("dts_sample.json")
-        self.energy = {"J100000": load_fixture("energy_J100000.json")["data"]}
+        self.energy = {m: load_fixture(f"energy_{m}.json")["data"] for m in ("J100000", "J100400", "J100089")}
         self.secret = "fake-signing-secret"
         self.valid_tokens: set[str] = set()
         self.logins = 0

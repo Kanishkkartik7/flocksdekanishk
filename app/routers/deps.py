@@ -18,4 +18,5 @@ UPSTREAM_ERRORS = {
     422: {"model": ErrorResponse, "description": "Invalid query parameters"},
     502: {"model": ErrorResponse, "description": "The portal failed, rejected our login, or answered unexpectedly"},
     504: {"model": ErrorResponse, "description": "The portal timed out"},
+    429: {"model": ErrorResponse, "description": "The portal is rate-limiting us; try again shortly"},
 }

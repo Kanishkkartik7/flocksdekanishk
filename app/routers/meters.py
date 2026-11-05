@@ -11,7 +11,7 @@ from app.routers.deps import NOT_FOUND, UPSTREAM_ERRORS, ServiceDep
 router = APIRouter(prefix="/meters", tags=["meters"])
 
 Codes = Annotated[list[str] | None, Query()]
-TIME_HELP = "ISO-8601. Without an offset, the time is taken as IST (+05:30)."
+TIME_HELP = "ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`."
 
 
 @router.get("", response_model=MeterPage, summary="List, filter and search meters", responses=UPSTREAM_ERRORS)
@@ -78,8 +78,9 @@ async def get_readings(
     start: Annotated[datetime | None, Query(description=f"Inclusive. {TIME_HELP}")] = None,
     end: Annotated[datetime | None, Query(description=f"Inclusive. {TIME_HELP}")] = None,
 ) -> ReadingsResponse:
-    """The portal's 30-minute readings as they are, cleaned up: real numbers and ISO timestamps. `energy_kwh` and
-    `apparent_energy_kvah` are running totals; use `/consumption` for usage per interval."""
+    """The portal's readings as they are, cleaned up: real numbers and ISO timestamps. Most meters report once a day;
+    a few report every 30 minutes. `energy_kwh` and `apparent_energy_kvah` are running totals; use `/consumption`
+    for usage per interval."""
     return await service.get_readings(meter_id, start, end)
 
 
@@ -94,8 +95,17 @@ async def get_consumption(
     service: ServiceDep,
     start: Annotated[datetime | None, Query(description=f"Readings from this time (inclusive). {TIME_HELP}")] = None,
     end: Annotated[datetime | None, Query(description=f"Readings up to this time (inclusive). {TIME_HELP}")] = None,
-    interval: Annotated[Literal["30m", "1d"], Query(description="`30m` intervals or `1d` (IST calendar days).")] = "30m",
+    interval: Annotated[
+        Literal["native", "1d"],
+        Query(
+            description="`native`: one row per pair of readings, in the meter's own step (30 minutes or 1 day, see "
+            "`reading_interval_minutes` in the response). `1d`: sum per IST calendar day."
+        ),
+    ] = "native",
 ) -> ConsumptionResponse:
     """Differences between consecutive readings (n readings give n-1 intervals), with power factor. Problems are
-    flagged rather than hidden: a register that goes down gives `energy_kwh: null` and the `negative_delta` flag."""
+    flagged rather than hidden: a register that goes down gives `energy_kwh: null` and the `negative_delta` flag, and
+    readings that are further apart than usual give one long interval flagged `gap` (and `spans_multiple_days`
+    beyond 24 hours). Missing readings are never filled in. `interval=1d` isn't available for a meter whose normal
+    step is longer than a day (422)."""
     return await service.get_consumption(meter_id, start, end, interval)

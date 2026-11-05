@@ -25,7 +25,7 @@ A clean, documented API in front of the **Urja Meter Ops** portal, which has no 
 
 * **Meters**: details, location and network position for every meter, with filters and a "near me" search
   the portal itself doesn't offer.
-* **Readings and consumption**: the portal's 30-minute register readings, plus derived usage per interval or
+* **Readings and consumption**: the portal's register readings (every 30 minutes or once a day, depending on the meter), plus derived usage per interval or
   per day, with power factor and data-quality flags.
 * **Network**: the distribution hierarchy (zone → … → transformer) rebuilt from the portal's data, with its
   inconsistencies listed rather than hidden.

@@ -103,7 +103,12 @@ def parse_transformer(raw: dict[str, Any]) -> Transformer | None:
 
 def parse_readings(rows: list[dict[str, Any]]) -> list[Reading]:
     """Rows from GET /portal/meters/{id}/energy, sorted by time. A row without a usable timestamp is skipped,
-    because it can't be placed in time; duplicate timestamps keep the last row."""
+    because it can't be placed in time.
+
+    The portal sometimes sends the same timestamp twice (observed: J100089's last row is repeated with blank `kwh`
+    and `voltR`). The row with more values wins; on a tie the later row does. A whole row is chosen, never a mix of
+    two rows, so every reading returned is one the portal actually sent.
+    """
     by_time: dict[datetime, Reading] = {}
     for row in rows:
         try:
@@ -111,10 +116,17 @@ def parse_readings(rows: list[dict[str, Any]]) -> list[Reading]:
         except (KeyError, TypeError, ValueError, AttributeError):
             log.warning("Skipping reading with unusable timestamp: %r", row)
             continue
-        by_time[timestamp] = Reading(
+        reading = Reading(
             timestamp=timestamp,
             energy_kwh=to_float(row.get("kwh")),
             apparent_energy_kvah=to_float(row.get("kvah")),
             voltage_r_v=to_float(row.get("voltR")),
         )
+        existing = by_time.get(timestamp)
+        if existing is None or _values_present(reading) >= _values_present(existing):
+            by_time[timestamp] = reading
     return [by_time[t] for t in sorted(by_time)]
+
+
+def _values_present(reading: Reading) -> int:
+    return sum(v is not None for v in (reading.energy_kwh, reading.apparent_energy_kvah, reading.voltage_r_v))

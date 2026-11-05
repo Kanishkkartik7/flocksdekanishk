@@ -88,19 +88,28 @@ class ReadingsResponse(BaseModel):
 class ConsumptionInterval(BaseModel):
     start: datetime
     end: datetime
+    duration_minutes: int = Field(description="Real time between `start` and `end`, in minutes.")
     energy_kwh: float | None = Field(description="Active energy used in the interval. `null` if it can't be derived.")
     apparent_energy_kvah: float | None = Field(description="Apparent energy in the interval.")
     power_factor: float | None = Field(description="`energy_kwh / apparent_energy_kvah`, rounded to 3 decimals.")
-    interval_count: int = Field(description="Number of 30-minute intervals summed into this row (1 for `30m`).")
+    interval_count: int = Field(
+        description="Number of reading-to-reading intervals summed into this row (1 for `native` rows)."
+    )
     flags: list[str] = Field(
-        description="Data-quality flags: `gap` (readings not 30 min apart), `missing_value`, `negative_delta` "
-        "(register went down), `power_factor_above_1`, `partial_day` (daily rows with fewer than 48 intervals)."
+        description="Data-quality flags: `gap` (readings not one normal step apart), `spans_multiple_days` (the interval is "
+        "longer than 24 hours because readings are missing; in `1d` mode it is its own row, not part of a day), "
+        "`missing_value`, `negative_delta` (register went down), `power_factor_above_1`, `partial_day` "
+        "(daily rows with fewer intervals than a full day)."
     )
 
 
 class ConsumptionResponse(BaseModel):
     meter_id: str
-    interval: Literal["30m", "1d"]
+    interval: Literal["native", "1d"]
+    reading_interval_minutes: int | None = Field(
+        description="How far apart this meter's readings normally are, in minutes: 30 for meters that report every "
+        "30 minutes, 1440 for meters that report once a day. `null` with fewer than two readings."
+    )
     total_energy_kwh: float = Field(description="Sum of `energy_kwh` over all rows (nulls skipped).")
     intervals: list[ConsumptionInterval]
 

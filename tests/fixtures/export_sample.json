@@ -482,5 +482,49 @@
    "lat": 26.808278881157843,
    "lng": 75.77806976755168
   }
+ },
+ {
+  "meterId": "J100089",
+  "serialNo": "HP38170",
+  "make": "Allied",
+  "phaseType": "three",
+  "installStatus": "Installed",
+  "installType": "Whole Current",
+  "build": "legacy",
+  "dtCode": "DT-010",
+  "hierarchy": {
+   "zone": {
+    "name": "Jaipur Zone 1",
+    "code": "Z-01"
+   },
+   "circle": {
+    "name": "Circle 4",
+    "code": "C-04"
+   },
+   "division": {
+    "name": "Division 10",
+    "code": "D-10"
+   },
+   "subdivision": {
+    "name": "Subdivision 10",
+    "code": "SD-10"
+   },
+   "substation": {
+    "name": "Substation 10",
+    "code": "SS-10"
+   },
+   "feeder": {
+    "name": "Feeder 10",
+    "code": "F-010"
+   },
+   "dt": {
+    "name": "Civil Lines DT 10",
+    "code": "DT-010"
+   }
+  },
+  "geo": {
+   "lat": 26.948594720712958,
+   "lng": 75.74747311618198
+  }
  }
 ]

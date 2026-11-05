@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Urja Meter API",
-    "description": "\nA clean, documented API in front of the **Urja Meter Ops** portal, which has no API of its own.\n\n* **Meters**: details, location and network position for every meter, with filters and a \"near me\" search\n  the portal itself doesn't offer.\n* **Readings and consumption**: the portal's 30-minute register readings, plus derived usage per interval or\n  per day, with power factor and data-quality flags.\n* **Network**: the distribution hierarchy (zone → … → transformer) rebuilt from the portal's data, with its\n  inconsistencies listed rather than hidden.\n\nTimes are ISO-8601 in IST (+05:30), as the portal's own (offset-less) times are interpreted. Every error has the\nshape `{\"error\": {\"code\", \"message\", \"details\"}}`. How the portal works underneath is described in `PROTOCOL.md`.\n",
+    "description": "\nA clean, documented API in front of the **Urja Meter Ops** portal, which has no API of its own.\n\n* **Meters**: details, location and network position for every meter, with filters and a \"near me\" search\n  the portal itself doesn't offer.\n* **Readings and consumption**: the portal's register readings (every 30 minutes or once a day, depending on the meter), plus derived usage per interval or\n  per day, with power factor and data-quality flags.\n* **Network**: the distribution hierarchy (zone → … → transformer) rebuilt from the portal's data, with its\n  inconsistencies listed rather than hidden.\n\nTimes are ISO-8601 in IST (+05:30), as the portal's own (offset-less) times are interpreted. Every error has the\nshape `{\"error\": {\"code\", \"message\", \"details\"}}`. How the portal works underneath is described in `PROTOCOL.md`.\n",
     "version": "0.1.0"
   },
   "paths": {
@@ -389,6 +389,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -462,6 +472,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -472,7 +492,7 @@
           "meters"
         ],
         "summary": "Raw meter readings (cumulative registers)",
-        "description": "The portal's 30-minute readings as they are, cleaned up: real numbers and ISO timestamps. `energy_kwh` and\n`apparent_energy_kvah` are running totals; use `/consumption` for usage per interval.",
+        "description": "The portal's readings as they are, cleaned up: real numbers and ISO timestamps. Most meters report once a day;\na few report every 30 minutes. `energy_kwh` and `apparent_energy_kvah` are running totals; use `/consumption`\nfor usage per interval.",
         "operationId": "get_readings_meters__meter_id__readings_get",
         "parameters": [
           {
@@ -498,10 +518,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30).",
+              "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`.",
               "title": "Start"
             },
-            "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30)."
+            "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`."
           },
           {
             "name": "end",
@@ -517,10 +537,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30).",
+              "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`.",
               "title": "End"
             },
-            "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30)."
+            "description": "Inclusive. ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`."
           }
         ],
         "responses": {
@@ -573,6 +593,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -583,7 +613,7 @@
           "meters"
         ],
         "summary": "Energy used per interval",
-        "description": "Differences between consecutive readings (n readings give n-1 intervals), with power factor. Problems are\nflagged rather than hidden: a register that goes down gives `energy_kwh: null` and the `negative_delta` flag.",
+        "description": "Differences between consecutive readings (n readings give n-1 intervals), with power factor. Problems are\nflagged rather than hidden: a register that goes down gives `energy_kwh: null` and the `negative_delta` flag, and\nreadings that are further apart than usual give one long interval flagged `gap` (and `spans_multiple_days`\nbeyond 24 hours). Missing readings are never filled in. `interval=1d` isn't available for a meter whose normal\nstep is longer than a day (422).",
         "operationId": "get_consumption_meters__meter_id__consumption_get",
         "parameters": [
           {
@@ -609,10 +639,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Readings from this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30).",
+              "description": "Readings from this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`.",
               "title": "Start"
             },
-            "description": "Readings from this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30)."
+            "description": "Readings from this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`."
           },
           {
             "name": "end",
@@ -628,10 +658,10 @@
                   "type": "null"
                 }
               ],
-              "description": "Readings up to this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30).",
+              "description": "Readings up to this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`.",
               "title": "End"
             },
-            "description": "Readings up to this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30)."
+            "description": "Readings up to this time (inclusive). ISO-8601. Without an offset, the time is taken as IST (+05:30). In a URL write `+` as `%2B`."
           },
           {
             "name": "interval",
@@ -639,15 +669,15 @@
             "required": false,
             "schema": {
               "enum": [
-                "30m",
+                "native",
                 "1d"
               ],
               "type": "string",
-              "description": "`30m` intervals or `1d` (IST calendar days).",
-              "default": "30m",
+              "description": "`native`: one row per pair of readings, in the meter's own step (30 minutes or 1 day, see `reading_interval_minutes` in the response). `1d`: sum per IST calendar day.",
+              "default": "native",
               "title": "Interval"
             },
-            "description": "`30m` intervals or `1d` (IST calendar days)."
+            "description": "`native`: one row per pair of readings, in the meter's own step (30 minutes or 1 day, see `reading_interval_minutes` in the response). `1d`: sum per IST calendar day."
           }
         ],
         "responses": {
@@ -693,6 +723,16 @@
           },
           "504": {
             "description": "The portal timed out",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
             "content": {
               "application/json": {
                 "schema": {
@@ -752,6 +792,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -804,6 +854,16 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "The portal is rate-limiting us; try again shortly",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
           }
         }
       }
@@ -845,6 +905,11 @@
             "format": "date-time",
             "title": "End"
           },
+          "duration_minutes": {
+            "type": "integer",
+            "title": "Duration Minutes",
+            "description": "Real time between `start` and `end`, in minutes."
+          },
           "energy_kwh": {
             "anyOf": [
               {
@@ -884,7 +949,7 @@
           "interval_count": {
             "type": "integer",
             "title": "Interval Count",
-            "description": "Number of 30-minute intervals summed into this row (1 for `30m`)."
+            "description": "Number of reading-to-reading intervals summed into this row (1 for `native` rows)."
           },
           "flags": {
             "items": {
@@ -892,13 +957,14 @@
             },
             "type": "array",
             "title": "Flags",
-            "description": "Data-quality flags: `gap` (readings not 30 min apart), `missing_value`, `negative_delta` (register went down), `power_factor_above_1`, `partial_day` (daily rows with fewer than 48 intervals)."
+            "description": "Data-quality flags: `gap` (readings not one normal step apart), `spans_multiple_days` (the interval is longer than 24 hours because readings are missing; in `1d` mode it is its own row, not part of a day), `missing_value`, `negative_delta` (register went down), `power_factor_above_1`, `partial_day` (daily rows with fewer intervals than a full day)."
           }
         },
         "type": "object",
         "required": [
           "start",
           "end",
+          "duration_minutes",
           "energy_kwh",
           "apparent_energy_kvah",
           "power_factor",
@@ -916,10 +982,22 @@
           "interval": {
             "type": "string",
             "enum": [
-              "30m",
+              "native",
               "1d"
             ],
             "title": "Interval"
+          },
+          "reading_interval_minutes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reading Interval Minutes",
+            "description": "How far apart this meter's readings normally are, in minutes: 30 for meters that report every 30 minutes, 1440 for meters that report once a day. `null` with fewer than two readings."
           },
           "total_energy_kwh": {
             "type": "number",
@@ -938,6 +1016,7 @@
         "required": [
           "meter_id",
           "interval",
+          "reading_interval_minutes",
           "total_energy_kwh",
           "intervals"
         ],

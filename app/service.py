@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from app import consumption
 from app.config import Settings
-from app.errors import NotFoundError, PortalError, PortalNotFound
+from app.errors import InvalidRequestError, NotFoundError, PortalError, PortalNotFound
 from app.models import (
     ConsumptionResponse,
     HealthResponse,
@@ -163,15 +163,25 @@ class MeterService:
         return ReadingsResponse(meter_id=meter.meter_id, count=len(readings), readings=readings)
 
     async def get_consumption(
-        self, meter_id: str, start: datetime | None, end: datetime | None, interval: Literal["30m", "1d"]
+        self, meter_id: str, start: datetime | None, end: datetime | None, interval: Literal["native", "1d"]
     ) -> ConsumptionResponse:
         meter = await self.get_meter(meter_id)
-        readings = _within(await self._readings_for(meter.meter_id), start, end)
-        rows = consumption.half_hourly(readings)
+        all_readings = await self._readings_for(meter.meter_id)
+        step = consumption.reading_step(all_readings)  # from the whole series, so a narrow window keeps the real step
+        rows = consumption.between_readings(_within(all_readings, start, end), step)
         if interval == "1d":
-            rows = consumption.daily(rows)
+            if step is not None and step > consumption.ONE_DAY:
+                raise InvalidRequestError(
+                    f"Meter {meter.meter_id} reports every {int(step.total_seconds() // 60)} minutes, which is longer "
+                    "than a day, so it can't be summed per day. Use interval=native."
+                )
+            rows = consumption.daily(rows, step)
         return ConsumptionResponse(
-            meter_id=meter.meter_id, interval=interval, total_energy_kwh=consumption.total_kwh(rows), intervals=rows
+            meter_id=meter.meter_id,
+            interval=interval,
+            reading_interval_minutes=None if step is None else int(step.total_seconds() // 60),
+            total_energy_kwh=consumption.total_kwh(rows),
+            intervals=rows,
         )
 
     async def network(self) -> NetworkResponse:

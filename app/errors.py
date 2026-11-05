@@ -42,6 +42,13 @@ class PortalTimeoutError(PortalError):
     code = "portal_timeout"
 
 
+class PortalRateLimitedError(PortalError):
+    """The portal answered 429 on every attempt. Passed on as 429 so callers know to slow down."""
+
+    status_code = 429
+    code = "portal_rate_limited"
+
+
 class PortalProtocolError(PortalError):
     """The portal answered, but not in the shape we expect (it may have changed)."""
 

@@ -52,6 +52,46 @@ def test_readings_and_consumption(api):
     assert [r["timestamp"][11:16] for r in window.json()["readings"]] == ["00:00", "00:30", "01:00"]
 
 
+def test_once_a_day_meter_reports_its_real_step(api):
+    usage = api.get("/meters/J100400/consumption").json()
+    assert usage["reading_interval_minutes"] == 1440
+    assert len(usage["intervals"]) == 7
+    assert all(i["flags"] == [] for i in usage["intervals"])
+    daily = api.get("/meters/J100400/consumption", params={"interval": "1d"}).json()
+    assert all(d["flags"] == [] and d["interval_count"] == 1 for d in daily["intervals"])
+    assert api.get("/meters/J100000/consumption").json()["reading_interval_minutes"] == 30
+
+
+def test_daily_summing_is_refused_for_meters_reading_less_often_than_daily(api, portal):
+    # Synthetic weekly readings (no such meter exists on the portal); only the step matters here.
+    portal.energy["J100400"] = [
+        {"timestamp": f"{day:02d}/06/2026 00:00", "kwh": str(100 + day), "kvah": str(108 + day), "voltR": "230"}
+        for day in (1, 8, 15)
+    ]
+    native = api.get("/meters/J100400/consumption").json()
+    assert native["reading_interval_minutes"] == 7 * 1440 and native["intervals"][0]["duration_minutes"] == 7 * 1440
+    refused = api.get("/meters/J100400/consumption", params={"interval": "1d"})
+    assert refused.status_code == 422
+    assert refused.json()["error"]["code"] == "invalid_request"
+
+
+def test_intervals_report_their_real_duration(api):
+    assert {i["duration_minutes"] for i in api.get("/meters/J100000/consumption").json()["intervals"]} == {30}
+    assert {i["duration_minutes"] for i in api.get("/meters/J100400/consumption").json()["intervals"]} == {1440}
+
+
+def test_blank_duplicate_row_does_not_erase_the_last_reading(api):
+    usage = api.get("/meters/J100089/consumption").json()
+    assert len(usage["intervals"]) == 7
+    assert all("missing_value" not in i["flags"] for i in usage["intervals"])
+    assert usage["intervals"][-1]["energy_kwh"] is not None
+
+
+def test_offset_with_plus_sign_works_when_encoded(api):
+    ok = api.get("/meters/J100000/readings", params={"start": "2026-06-24T00:00:00+05:30"})  # httpx encodes the +
+    assert ok.status_code == 200 and ok.json()["readings"][0]["timestamp"] == "2026-06-24T00:00:00+05:30"
+
+
 def test_readings_are_cached(api, portal):
     api.get("/meters/J100000/readings")
     api.get("/meters/J100000/consumption")
@@ -97,6 +137,19 @@ def test_expired_session_triggers_one_relogin(api, portal, logged_out_style):
     portal.expire_sessions()
     assert api.get("/meters/J100000/consumption").status_code == 200
     assert portal.logins == 2
+
+
+def test_rate_limiting_is_retried_then_passed_on_as_429(api, portal):
+    portal.fail("/portal/export", 429)
+    assert api.get("/meters").status_code == 200  # one 429, then success
+    assert portal.calls["/portal/export"] == 2
+
+
+def test_persistent_rate_limiting_gives_429(api, portal):
+    portal.fail("/login", 429, 429, 429)
+    response = api.get("/meters")
+    assert response.status_code == 429
+    assert response.json()["error"]["code"] == "portal_rate_limited"
 
 
 def test_portal_down_gives_a_clean_502_and_degraded_health(api, portal):

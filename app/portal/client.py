@@ -7,7 +7,8 @@ What it handles (details in PROTOCOL.md):
 - Data endpoints only need that cookie. Without a valid session they answer 401 with JSON. We log in again a little
   before the hour is up, and also whenever a response looks logged out: 401/403, or, as a precaution, a redirect or HTML
   where JSON was expected.
-- The portal sometimes returns 502s, so GETs are retried with exponential backoff on timeouts, connection errors and 502/503/504.
+- The portal sometimes returns 502s, and rate-limits bursts with 429, so requests are retried with exponential backoff on
+  timeouts, connection errors and 429/502/503/504 (a short `Retry-After` is honoured). A 429 that persists is passed on as 429.
 - GET /portal/export must be HMAC-signed with a secret from GET /portal/keys (see signing.py).
 """
 
@@ -26,6 +27,7 @@ from app.errors import (
     PortalError,
     PortalNotFound,
     PortalProtocolError,
+    PortalRateLimitedError,
     PortalTimeoutError,
     PortalUnavailableError,
 )
@@ -34,7 +36,8 @@ from app.portal.signing import sign_request
 log = logging.getLogger(__name__)
 
 SESSION_COOKIE = "__Secure-better-auth.session_token"
-RETRYABLE_STATUS = {502, 503, 504}
+RETRYABLE_STATUS = {429, 502, 503, 504}
+MAX_RETRY_AFTER_SECONDS = 10.0  # never sleep longer than this because of a Retry-After header
 MAX_PAGES = 500  # safety stop for paginated endpoints
 
 
@@ -69,7 +72,7 @@ class PortalClient:
         return await self._collect_pages(lambda page: self.get_json(f"/portal/dts?page={page}"))
 
     async def fetch_energy(self, meter_id: str) -> list[dict[str, Any]]:
-        """Raw 30-minute register readings for one meter. Raises PortalNotFound for unknown meters."""
+        """Raw register readings for one meter. Raises PortalNotFound for unknown meters."""
         body = await self.get_json(f"/portal/meters/{quote(meter_id, safe='')}/energy")
         return _data_list(body)
 
@@ -158,9 +161,11 @@ class PortalClient:
         """One logical request, retried on transient failures. Signed requests are re-signed on every attempt."""
         attempts = self._settings.portal_max_attempts
         last_error: PortalError = PortalUnavailableError(f"No attempt made for {method} {url}")
+        retry_after = 0.0
         for attempt in range(1, attempts + 1):
             if attempt > 1:
-                await asyncio.sleep(self._settings.portal_retry_backoff_seconds * 2 ** (attempt - 2))
+                await asyncio.sleep(max(self._settings.portal_retry_backoff_seconds * 2 ** (attempt - 2), retry_after))
+            retry_after = 0.0
             request_headers = dict(headers or {})
             if signed:
                 request_headers.update(await self._signature_headers(method, url))
@@ -174,7 +179,11 @@ class PortalClient:
             else:
                 if response.status_code not in RETRYABLE_STATUS:
                     return response
-                last_error = PortalUnavailableError(f"Portal returned HTTP {response.status_code} for {method} {url}")
+                if response.status_code == 429:
+                    retry_after = _retry_after_seconds(response)
+                    last_error = PortalRateLimitedError(f"Portal rate-limited {method} {url} (HTTP 429); retry later")
+                else:
+                    last_error = PortalUnavailableError(f"Portal returned HTTP {response.status_code} for {method} {url}")
             log.warning("Portal request failed (attempt %d/%d): %s", attempt, attempts, last_error.message)
         raise last_error
 
@@ -209,6 +218,15 @@ def _looks_logged_out(response: httpx.Response) -> bool:
         return True
     # A 200 with HTML where JSON was expected is most likely the login page.
     return response.status_code == 200 and "json" not in response.headers.get("content-type", "")
+
+
+def _retry_after_seconds(response: httpx.Response) -> float:
+    """The `Retry-After` header in seconds, capped. The portal sent no such header when it rate-limited (observed), so
+    this is usually 0 and the normal backoff applies."""
+    try:
+        return min(max(float(response.headers.get("retry-after", "0")), 0.0), MAX_RETRY_AFTER_SECONDS)
+    except ValueError:  # an HTTP-date form; not worth parsing
+        return 0.0
 
 
 def _json_or_none(response: httpx.Response) -> Any:
