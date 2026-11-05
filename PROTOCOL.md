@@ -1,8 +1,8 @@
 # How the Urja Meter Ops portal works
 
-This is what I found by exploring https://urja-ops.flockenergy.tech, logged in as `operator@urja.local`, on 4–5 Nov 2026.
+This is what I found by exploring https://urja-ops.flockenergy.tech, logged in as `operator@urja.local`, on 4 and 5 Nov 2026.
 Almost everything came from the browser (Chrome DevTools) and normal page use. Later, a few read-only checks were made from
-Python. An AI assistant helped me plan the steps and read the results (see [§9](#9-how-i-investigated)).
+Python. AI tools (Google Antigravity, ChatGPT and Claude Code) helped me plan the steps and read the results (see [§9](#9-how-i-investigated)).
 
 **How to read the labels.** *Verified* means I saw it in a real response. *Inferred* means it is a sensible reading of what I
 saw, but not proven. *Unverified* means I did not check. *SvelteKit convention* means it comes from how SvelteKit works, not from
@@ -87,7 +87,7 @@ I found these in the Network tab, then checked the list by searching every JavaS
 | POST | `/login` | form `email`, `password` | JSON result: `redirect` plus the cookie, or `failure` (see [§2](#2-access-and-authentication)) |
 | GET | `/portal/meters/search` | `q` (meter number or serial), `page` | `{data, total, page, pageSize}`, 20 per page |
 | GET | `/portal/meters/{id}/geo` | none | `{"data":{"latitude":"26.93…","longitude":"75.83…"}}` (strings) |
-| GET | `/portal/meters/{id}/energy` | none (no date range) | `{"data":[{timestamp, kwh, kvah, voltR}, …]}`. 337 rows for J100000 (every 30 min), 8–9 for the daily meters checked |
+| GET | `/portal/meters/{id}/energy` | none (no date range) | `{"data":[{timestamp, kwh, kvah, voltR}, …]}`. 337 rows for J100000 (every 30 min), 8 or 9 for the daily meters checked |
 | GET | `/meters/{id}/__data.json` | `x-sveltekit-invalidated=001` | page data in devalue format: `meterId`, `detail`, `hierarchy` |
 | GET | `/portal/dts` | `page` | `{data:[{code, name, feederCode, capacityKva}], total: 40, page, pageSize: 20}` |
 | GET | `/portal/keys` | none | `{"data":{"signingSecret":"…"}}` |
@@ -179,8 +179,8 @@ first. (I did not compare the other four field by field.)
 - **`kwh` and `kvah` are cumulative registers**, like a car's odometer. **Usage is the difference between readings**, so n readings
   give **n − 1 intervals** (337 give 336, 8 give 7). *Verified* for the four meters whose usage I computed (J100000, J100400,
   J100089, J100134): no register went down. *Unverified* for the rest.
-- **kWh ÷ kVAh** is about 0.93 on J100000 and J100400 (0.926–0.933 on the intervals I looked at). That ratio is the power factor.
-- **`voltR`** is the R-phase voltage (220–240 V in what I saw). Even a three-phase meter (J100005) reports only `voltR`.
+- **kWh ÷ kVAh** is about 0.93 on J100000 and J100400 (0.926 to 0.933 on the intervals I looked at). That ratio is the power factor.
+- **`voltR`** is the R-phase voltage (220 to 240 V in what I saw). Even a three-phase meter (J100005) reports only `voltR`.
 - **Timestamps** look like `DD/MM/YYYY HH:MM`: **day first, no timezone**. Day-first is *verified* (`30/06/2026` cannot be
   month-first). I read them as **IST (+05:30)** because the utility is in Jaipur (*inferred*; the portal never says).
 - **Every value is a string**, and trailing zeros are dropped (`"48440"`).
@@ -253,7 +253,7 @@ From the downloaded export (all 403 meters), *computed* with a script:
   path, so each of these is a separate node, and it lists the reused codes in `issues`, because a consumer filtering by code alone
   would otherwise mix branches.
 - **Clean parts:** no duplicate IDs or serials; `dtCode` always equals `hierarchy.dt.code`; all coordinates are inside Jaipur.
-- **Usage looks generated** (J100000 only, *inferred*): it uses 20.29–20.30 kWh on every full day, at a constant power factor of
+- **Usage looks generated** (J100000 only, *inferred*): it uses 20.29 to 20.30 kWh on every full day, at a constant power factor of
   0.926, with no daily load shape.
 
 ## 9. How I investigated
@@ -274,9 +274,10 @@ Here is the order I worked in, including the dead ends.
 8. **Later, in a review of my own code**, I fetched readings for more meters and found that they do not all follow the first two
    I had looked at (different schedule, repeated last rows). That is why [§4](#readings-energy) has labels and a table.
 
-**The AI assistant's part:** I did the browsing myself. Claude Code suggested the next step and the Console snippets, and helped me
-read what came back: the devalue format, the route list, the signing code. The later review and fixes were also done with Claude
-Code. A claim stayed *inferred* or *unverified* until a live response showed otherwise. More in the README's
+**The AI tools' part:** I did the browsing myself. I used Google Antigravity, ChatGPT and Claude Code during the assignment. Claude
+Code suggested the next step and the Console snippets, and helped me read what came back: the devalue format, the route list, the
+signing code. ChatGPT helped me think through the portal's behaviour and troubleshoot. The later review and fixes were done with
+Claude Code. A claim stayed *inferred* or *unverified* until a live response showed otherwise. More in the README's
 [How I used AI](README.md#how-i-used-ai).
 
 I treated the portal as read-only throughout: normal page use and GET requests only, one at a time.

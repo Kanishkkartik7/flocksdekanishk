@@ -6,7 +6,7 @@
 
 - **The bulk export is reliable for meter details.** I verified the bulk export against the regular portal pages for two meters: J100000 (legacy format) and J100004 (v2 format). Both matched, so I treated the bulk export as the primary source for meter information.
 
-- **The data represents a fixed snapshot.** All eight meters I checked had readings covering the same period: 23–30 June 2026. Based on this, I treated caching as a way to reduce unnecessary requests to the portal rather than a mechanism for keeping up with incoming data.
+- **The data represents a fixed snapshot.** All eight meters I checked had readings covering the same period: 23 to 30 June 2026. Based on this, I treated caching as a way to reduce unnecessary requests to the portal rather than a mechanism for keeping up with incoming data.
 
 - **A session expiry returns the same error across endpoints.** I observed a `401` response on only one endpoint, `/portal/meters/search`. I assumed other endpoints behave similarly, although this has not been independently verified.
 
@@ -79,3 +79,17 @@ There were a few smaller mistakes too:
 - **The application is currently designed as a single process with an in-memory cache.** That's perfectly reasonable for 403 meters, but if the application needs to run across multiple workers, each worker would have its own cache and login session. I'd need to rethink that part.
 
 - **The documentation could be shorter.** I've documented things in quite a lot of detail, but someone reviewing the project in a hurry might prefer a shorter README that explains the setup, approach, and important decisions without having to go through everything.
+
+## How I used AI tools
+
+AI help was substantial in this assignment, especially for writing the implementation. I used three tools:
+
+- **Google Antigravity** was part of my development workflow.
+- **ChatGPT** helped me reason through the portal's behaviour, troubleshoot problems, discuss implementation decisions and review the
+  documentation.
+- **Claude Code** helped with implementation, code and test generation, debugging, and the later code review and fixes.
+
+I did the browser investigation myself and made the decisions about what to build and what to skip. I ran the service against the
+live portal and approved each change in the later review. I did not write every line of code, and I would not claim that. What I
+learned is that AI tools can sound sure about things that are not checked yet, so I only trust a claim after I see it in a real
+response. The [README](README.md#how-i-used-ai) has the full description.

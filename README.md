@@ -152,7 +152,7 @@ Details and the verified / inferred / unverified labels are in [PROTOCOL.md](PRO
   (+05:30), a fixed offset because India has no daylight saving.
 - **The export is the source of truth for meter details.** It matched the list and meter pages for the two meters I compared
   (J100000 legacy, J100004 v2), and it is the only source that is clean for both record formats.
-- **The data is a static snapshot.** The eight meters whose readings I fetched all cover 23–30 June 2026. I have not checked the
+- **The data is a static snapshot.** The eight meters whose readings I fetched all cover 23 to 30 June 2026. I have not checked the
   rest. If that holds, the cache times protect the portal; they do not catch updates.
 - **Meters have different reading schedules.** J100000 and J100001 report every 30 minutes (337 rows). J100400 and five others
   report once a day (8 rows, or 9 with a repeated last row). I did not check the other 395 meters, so the API reads each meter's
@@ -264,7 +264,15 @@ What I would change at that scale:
   two reading bugs got past the first version of the tests. There is no live contract test yet.
 
 ## How I used AI
-I worked with Claude Code (Anthropic's AI coding assistant) in VS Code. This is how the work was split.
+AI help was substantial in this project, especially for the implementation. I did not write every line of code myself. I used three
+tools:
+
+- **Google Antigravity** was part of my development workflow.
+- **ChatGPT** helped me reason through the portal's behaviour, troubleshoot problems, discuss implementation choices and review my
+  documentation.
+- **Claude Code** (in VS Code) helped with implementation, code and test generation, debugging, and the later code review and fixes.
+
+The lists below cover my own work and what Claude Code did in this repository.
 
 **What I did**
 - **Explored the portal myself** in Chrome DevTools: logging in, clicking through pages, running Console snippets, reading the page
@@ -276,7 +284,7 @@ I worked with Claude Code (Anthropic's AI coding assistant) in VS Code. This is 
   password.
 - **Edited the drafts** of this README, PROTOCOL.md and [REFLECTION.md](REFLECTION.md).
 
-**What Claude did**
+**What Claude Code did**
 - Read the brief and planned the work with me. It guided the investigation one step at a time: which request to look at next, the
   Console snippets to run, and what the answers meant (SvelteKit's data format, the HMAC signing code, and meter terms such as
   cumulative registers, kVAh and power factor).
