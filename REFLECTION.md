@@ -1,114 +1,81 @@
 # Reflection
 
-This is the honest story of the assignment: what I assumed, where I got stuck, what I got wrong, and what I would still
-criticise. The mistakes are the most useful part, so I have not hidden them.
+## What assumptions did I make?
 
-## The journey in short
+- **All timestamps are in Indian Standard Time (IST).** The portal returns timestamps like `23/06/2026 23:30` without specifying a timezone. Since the utility is based in Jaipur, I assumed these timestamps are in IST (+05:30). If this assumption is incorrect, all daily totals could shift by 5 hours and 30 minutes. To make this transparent, the API includes the timezone offset whenever it returns a timestamp.
 
-1. **Looked at the portal like a normal user.** I logged in with DevTools open and watched the Network tab. The pages had no
-   data in their HTML. The data came as JSON from a few `/portal/...` URLs, so I would not need to scrape anything.
-2. **Hit a wall.** The list gives 20 meters per page, and each meter's details come in one of two odd formats. Building all the
-   data from those pages would take about 827 requests and three different parsers. I checked SvelteKit's route list for hidden
-   pages. There were none. That was a dead end.
-3. **Found the way out.** I searched every JavaScript file for `/portal/`. Two URLs showed up that the pages never call by
-   themselves: `/portal/keys` and `/portal/export`. The *Export all meters* button uses them to download all 403 meters in one
-   request, with a signature on it.
-4. **Worked out the signature.** I read the portal's own code, copied the recipe into Python, and checked it against Node.
-   The live portal accepted it.
-5. **Built the API** (FastAPI): login and session handling, retries, cache, filters, location search and the network tree.
-6. **Wrote the docs**, and thought the work was nearly done.
-7. **A later review found two real bugs** in how I handled readings (see "mistakes" below). I checked them against the live
-   portal, fixed them, and corrected the docs that had been wrong.
+- **The bulk export is reliable for meter details.** I verified the bulk export against the regular portal pages for two meters: J100000 (legacy format) and J100004 (v2 format). Both matched, so I treated the bulk export as the primary source for meter information.
 
-## What assumptions did you make?
-- **Timestamps are IST.** The portal sends `23/06/2026 23:30` with no timezone. I read it as IST (+05:30) because the utility is in
-  Jaipur and India has no daylight saving. If that is wrong, every daily total moves by five and a half hours. Every time the API
-  returns has its offset written out, so at least the assumption is visible.
-- **The signed export is the source of truth for meter details.** I compared it with the list and meter pages for one meter of
-  each format (J100000 `legacy`, J100004 `v2`), not for all 403.
-- **The data is a static snapshot.** The eight meters whose readings I fetched all cover 23–30 June 2026, so I treated the cache
-  times as a way to protect the portal, not to keep up with new data. I did not check the other 395 meters.
-- **Hierarchy codes are not unique everywhere.** I deliberately did not assume they are. 54 codes appear under more than one
-  parent, so the API keeps each meter's path as reported and lists the problems.
-- **Smaller ones:**
-  - Meter IDs can be accepted in any case, because no two differ only by case.
-  - Odd data, such as readings from decommissioned meters, is passed through, not hidden.
-  - A falling register is flagged, not treated as a meter reset.
-  - Every data endpoint answers an expired session the same way. I only checked one of them.
-- **An assumption that turned out wrong:** that every meter reports every 30 minutes. More on that below.
+- **The data represents a fixed snapshot.** All eight meters I checked had readings covering the same period: 23–30 June 2026. Based on this, I treated caching as a way to reduce unnecessary requests to the portal rather than a mechanism for keeping up with incoming data.
 
-## Which part was the most difficult, and how did you get unstuck?
-**Finding a bulk way to get the data.** The visible pages are slow and awkward. Twenty meters per page, then one request per meter
-for details, and two different formats for those details (a list of label/value pairs for `legacy` meters, and a JSON string hidden
-inside the page data for `v2` meters). I was not even sure a better route existed.
+- **A session expiry returns the same error across endpoints.** I observed a `401` response on only one endpoint, `/portal/meters/search`. I assumed other endpoints behave similarly, although this has not been independently verified.
 
-My first idea was to look for hidden pages in SvelteKit's route list. That found nothing.
+- **Meter IDs can be handled without considering letter case.** The portal treats meter IDs as case-sensitive, but none of the IDs I encountered differed only by uppercase or lowercase letters. So, I assumed this would not cause any conflicts in the current dataset.
 
-What worked was searching all the loaded JavaScript for `/portal/`. The Transformers page's code mentioned two URLs that nothing
-calls when the page loads: `/portal/keys` and `/portal/export`. I read that code before calling either one. It signs the export
-request with HMAC-SHA256, using a secret that comes from `/portal/keys`. I clicked the portal's own export button to see what it
-sent, then rebuilt the same request in Python. One response gave me all 403 meters with their full hierarchy and location.
+- **Unusual data is preserved rather than silently filtered out.** For example, meter J100000 is marked as decommissioned but still contains a complete week of readings. I chose to retain such records instead of removing them automatically.
 
-The lesson: when the screen runs out of answers, the page's own code is the documentation.
+- **Decreasing meter readings are flagged, not corrected.** If a reading is lower than the previous one, I flag it as an anomaly rather than assuming the meter was reset or changing the value. This avoids making corrections without sufficient evidence.
 
-**The second hard part** was the messy hierarchy. The same code (for example `D-01`) shows up under several parents. At first I
-thought the data couldn't say whether codes are only unique inside a parent or the data is simply wrong. A closer look settled
-it: every transformer has exactly one upstream path, so the codes are reused per parent. The API keeps each meter's path exactly
-as reported and lists every reused code under `issues`.
+## Which part was the most difficult, and how did I get unstuck?
 
-## What mistakes did you make while solving this?
-In the order they hurt:
+The biggest challenge was figuring out how to retrieve all the meter data efficiently. The portal displays only 20 meters per page, and individual meter details come in two different formats. Fetching everything through the normal pages would have required around 827 requests and three separate parsers.
 
-1. **I assumed every meter reports every 30 minutes.** I looked at two meters, both did, and I wrote the code and the docs as if all
-   403 were the same. They are not. J100400 reports once a day. My code then labelled 24-hour intervals as `30m` and flagged every
-   one of them as a `gap`. My PROTOCOL.md even said "337 readings for every meter", which was wrong.
-   *Fix:* the API now reads each meter's normal step from its own timestamps and reports the real `duration_minutes`.
-2. **My parser threw away good data.** For five meters (J100089, J100134, J100195, J100211, J100330) the portal sends the last row
-   twice, and the second copy has a blank `kwh`. My code kept "the last row", so the blank one won and the real reading was lost.
-   I had written "duplicates keep the last row" as a guess about the portal, and never checked it.
-   *Fix:* the row with more values wins (the later row on a tie), and rows are never mixed.
-3. **My tests could not catch either bug.** They run against a fake portal that I built from my own understanding, and my fixtures
-   had no once-a-day meter and no duplicate row. So the code and the tests were wrong in the same way, and everything was green.
-   A separate review, with real data from the live portal, found both bugs. *Fix:* I added fixtures made from real responses
-   (J100400, J100089) and tests for both cases.
-4. **My docs said more than I had checked.** Examples: "every meter has 337 readings", and "decommissioned meters report a full
-   week", which I had seen on one meter only. PROTOCOL.md now labels each claim as verified, inferred or unverified, and says plainly
-   that I checked eight meters, not 403.
-5. **I ran code I had not read, on someone else's system.** I pasted a snippet from my AI assistant into the browser console
-   without reading it. It was pseudo-code, so it failed harmlessly (`fetch(...).json is not a function`). But I was logged in to a
-   production system. After that I read every snippet before running it, and I did the same when I read the export code before
-   calling `/portal/export`.
-6. **I tested session expiry too early.** I tried about 40 minutes after logging in, before the one-hour cookie could expire, and
-   got normal data back. I should have worked out the expiry time first. I re-ran it later and got the real answer: a `401` with
-   JSON.
-7. **I typed `j100000` in lowercase by accident.** This one helped. It showed me that the portal's IDs are case-sensitive and what
-   its 404 looks like. Both went straight into the design.
+Initially, I tried finding hidden pages through SvelteKit's route list, but that didn't lead anywhere. Claude then suggested searching the portal's JavaScript files for `/portal/` to identify API endpoints that the frontend might not be using directly.
 
-## If you had another day, what would you improve?
-In order of risk:
-1. **Check all 403 meters' readings, slowly.** Right now the schedule claims cover eight meters. One gentle pass (about one request
-   per second) would turn "unverified" into a real count.
-2. **Settle the open protocol questions** in [PROTOCOL.md §10](PROTOCOL.md#10-open-questions): how long a signature stays valid,
-   whether the secret changes, what `page=2` returns, and whether the `Origin` header is really required. Each takes a few minutes
-   in the browser, and each would replace a defensive guess in the client with known behaviour.
-3. **Add contract tests against the live portal**, run on a schedule, so a change in the portal is caught before users notice. This
-   is the direct answer to mistake 3.
-4. **Build the fallback** to the meter pages (`__data.json`, both formats), so meter details survive if the export is withdrawn.
-5. **Move refreshes into a background job with a small database**, so requests never wait on the portal.
-6. **Build a small web client:** a map of meters by status, consumption charts, and a hierarchy view that shows the data issues.
+That search revealed two interesting endpoints: `/portal/keys` and `/portal/export`. Both were referenced in the Transformers page code. Looking through that code, I discovered they were actually used by an *Export all meters* button. I had visited the page before but had overlooked this option.
 
-## If you were reviewing your own submission, what would you criticise?
-- **Most of the code was written with an AI assistant.** I did the portal investigation, made the scope decisions and checked the
-  results, but my understanding of the code comes from reading and testing it, not from typing it. The README says this plainly.
-- **The tests check the code against my own understanding of the portal.** The fake portal copies the protocol as I understood it,
-  so a misunderstanding makes the code and the tests wrong together (this already happened once, see mistake 3). There is still no
-  live contract test in the repo.
-- **It rests on an undocumented endpoint.** The export sits behind one button and has its own signing scheme. If it changes, meter
-  details go stale. The fallback is described, not built.
-- **Some things are still guesses:** the signature time window, `page=2`, whether the secret changes, and the reading schedule of
-  395 meters. The client is written defensively around them, but they are not proven.
-- **The reading step is a heuristic.** The API uses the most common gap between readings. A meter with very irregular readings
-  could get an odd step.
-- **It is one process with an in-memory cache.** Several workers would mean several caches and several portal logins, and a
-  restart downloads everything again. That is fine for 403 meters, but it is a limit.
-- **The docs are long.** A reviewer with ten minutes might want a shorter README, with the details moved into separate files.
+The export endpoint required an HMAC-SHA256 signature, generated using a secret retrieved from `/portal/keys`. Before making any direct API calls, I reviewed the relevant code, clicked the actual export button, and captured its request.
+
+From there, Claude helped recreate the signature-generation logic in Python. We compared its output with the same function in Node.js to make sure both implementations matched. Once everything was verified, the live portal accepted the request.
+
+The breakthrough was that a single export response provided all 403 meters, including their complete hierarchy and location details. This eliminated the need to make hundreds of individual requests and handle multiple data formats separately.
+
+## If I had another day, what would I improve?
+
+There are a few things I'd like to work on if I had one more day:
+
+1. **Check readings for all meters.** So far, I've only checked readings for eight meters. My understanding that some meters report every 30 minutes while others report once a day is based on that small sample. I'd run a slow check, making roughly one request per second, to understand the actual reporting pattern across all 403 meters.
+
+2. **Verify a few things about the portal.** There are still some unanswered questions, such as how long the signature remains valid, whether the secret changes, what happens when requesting `page=2` from the export endpoint, and whether the `Origin` header is actually required. I'd spend some time testing these in the browser rather than making assumptions.
+
+3. **Add tests against the live portal.** My current tests don't check whether the actual portal is still behaving as expected. I'd add scheduled tests to catch changes in the portal's endpoints or response formats before they cause problems.
+
+4. **Keep a fallback for data extraction.** Right now, the solution depends on the bulk export endpoint. I'd also build a backup method using the normal meter pages, so the system can still retrieve data if the export feature stops working.
+
+5. **Move data refreshing to the background.** Instead of making users wait for the portal to respond, I'd refresh the data in the background and store it in a small database. That would make the application faster and more reliable.
+
+6. **Build a simple dashboard.** I'd like to add a web page showing meters on a map, grouped by their status, along with consumption charts. This would make the collected data much easier to explore and understand.
+
+## What mistake did I make while solving this?
+
+The biggest mistake I made was **assuming that every meter sends readings every 30 minutes.** The first two meters I checked, J100000 and J100001, both had 337 readings at 30-minute intervals. I assumed the same pattern would apply to all 403 meters, but that turned out to be wrong. Some meters, like J100400, report only once a day.
+
+Because of this, my code started flagging daily readings as missing data. I also documented the assumption in `PROTOCOL.md`, stating that every meter had 337 readings, which was incorrect.
+
+While reviewing the data, I found another issue. For five meters, the portal was returning the last reading twice, with the duplicate having a blank `kwh` value. My parser was keeping the blank row and accidentally discarding the actual reading.
+
+The frustrating part was that **all my tests were passing despite these mistakes.** The reason was that I had built a fake portal based on my own understanding of how the real portal worked. Since both the code and the tests were based on the same assumptions, the tests couldn't catch the problems.
+
+I only discovered these issues when I went back and fetched readings from more meters with Claude. It taught me an important lesson: checking two examples isn't enough to establish a pattern, and tests are only as reliable as the data and assumptions behind them.
+
+There were a few smaller mistakes too:
+
+- I pasted a code snippet into the browser console without properly reading it first. It was only pseudocode and failed harmlessly, but I should have checked it before running anything in a real system.
+- I tested session expiry around 40 minutes after logging in, even though the session was valid for an hour. So the test didn't actually verify an expired session.
+- I entered `j100000` in lowercase. That resulted in a 404, which helped me discover that meter IDs are case-sensitive and understand how the portal responds to invalid IDs.
+
+## If I were reviewing my own submission, what would I criticise?
+
+- **I relied quite heavily on AI for writing the code.** I handled the browser investigation and made the scope decisions about what to build and what to skip. However, most of the actual code was written with the help of an AI assistant. I understand how it works by reading it and testing it, but I didn't write every part myself.
+
+- **My tests aren't independent enough.** Most of them are based on my own understanding of how the portal works. That's exactly why the reading-schedule issue went unnoticed. I'd also like to have tests that check the actual live portal, which I haven't implemented yet.
+
+- **The solution depends on an endpoint that isn't officially documented.** The bulk export works right now, but if the portal changes its export API or signing mechanism, the meter details could stop updating. I haven't built a proper fallback for that yet.
+
+- **There are still a few things I haven't fully verified.** For example, how long the signature stays valid, what `page=2` returns, whether the secret changes over time, and how frequently the remaining 395 meters report readings.
+
+- **The reading-frequency calculation could be more reliable.** Currently, I use the most common time gap between readings to estimate a meter's reporting interval. This works for regular patterns, but meters with irregular readings might produce misleading results.
+
+- **The application is currently designed as a single process with an in-memory cache.** That's perfectly reasonable for 403 meters, but if the application needs to run across multiple workers, each worker would have its own cache and login session. I'd need to rethink that part.
+
+- **The documentation could be shorter.** I've documented things in quite a lot of detail, but someone reviewing the project in a hurry might prefer a shorter README that explains the setup, approach, and important decisions without having to go through everything.

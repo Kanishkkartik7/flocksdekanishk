@@ -13,9 +13,10 @@ consumption as clean JSON, without ever touching the portal.
 ## The journey in short
 1. I explored the portal with Chrome DevTools. The pages carry no data; they fetch JSON from a few `/portal/...` URLs.
 2. Getting all the data through the visible pages would need about 827 requests and three parsers. I looked for hidden pages (a
-   dead end), then searched the portal's JavaScript for `/portal/` and found a **signed bulk export** that returns all 403 meters
-   in one request.
-3. I rebuilt the signature in Python, then built the API on top of it.
+   dead end). Then, at Claude's suggestion, I searched the portal's JavaScript for `/portal/` and found a **signed bulk export**
+   behind the *Export all meters* button on the Transformers page, a button I had overlooked. It returns all 403 meters in one
+   request.
+3. With Claude, I rebuilt the signature in Python and checked it against Node's version. Then we built the API on top of it.
 4. **A later review found two real bugs of mine:** I had assumed every meter reports every 30 minutes (some report once a day),
    and my parser threw away good readings when the portal repeated a row. My tests did not catch this because they used a fake
    portal built from my own assumptions. I fixed both against real data. The full story is in [REFLECTION.md](REFLECTION.md).
